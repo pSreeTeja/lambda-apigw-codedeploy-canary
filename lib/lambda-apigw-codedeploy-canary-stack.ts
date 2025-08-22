@@ -8,7 +8,7 @@ import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 export class LambdaApigwCodedeployCanaryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-    // Lambda function
+
     const handler = new lambda.Function(this, "MyLambdaHandler", {
       runtime: lambda.Runtime.NODEJS_18_X,
       code: lambda.Code.fromAsset("lambda"), // your code folder
@@ -39,14 +39,12 @@ export class LambdaApigwCodedeployCanaryStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
-    // ✅ CodeDeploy Canary Deployment for Lambda
+    //CodeDeploy Canary Deployment for Lambda
     new codedeploy.LambdaDeploymentGroup(this, "DeploymentGroup", {
       alias,
       deploymentConfig: codedeploy.LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES,
       alarms: [errorAlarm],
-      // Other options: LINEAR_10PERCENT_EVERY_1MINUTE, ALL_AT_ONCE, etc.
       autoRollback: {
-        failedDeployment: true,   // rollback if errors
         deploymentInAlarm: true, // rollback if alarm is triggered
       },
     });
