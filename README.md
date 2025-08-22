@@ -4,20 +4,22 @@
 
 Implement safe canary deployments for a Lambda function behind API Gateway using AWS CDK (TypeScript).
 
-- Each new deployment sends a small percentage (e.g., 10%) of traffic to the new Lambda version.
-- If the new version works fine, traffic automatically shifts to 100% new version after a defined interval.
-- If errors occur, traffic rolls back automatically to the stable version using CloudWatch alarms.
+### Objectives:
+
+- Gradually shift traffic to a new Lambda version using canary deployment strategies.
+- Automatically roll back to the stable version if errors or latency issues are detected.
+- Leverage AWS services like CodeDeploy and CloudWatch for seamless traffic management and monitoring.
 
 ---
 
-## ⚙️ Key AWS Components Involved
+## ⚙️ Key AWS Components
 
-- **Lambda Function** – Business logic.
-- **Lambda Versions & Aliases** – Enable routing between old & new versions.
-- **API Gateway** – Exposes Lambda alias as an HTTP endpoint.
-- **CodeDeploy** – Handles traffic shifting (canary/linear) during deployment.
-- **CloudWatch Alarms** – Monitor errors/latency and trigger rollback.
-- **CDK (TypeScript)** – Infrastructure as code.
+- **Lambda Function**: Core business logic.
+- **Lambda Versions & Aliases**: Manage traffic routing between versions.
+- **API Gateway**: Exposes the Lambda alias as an HTTP endpoint.
+- **CodeDeploy**: Automates traffic shifting and rollback during deployments.
+- **CloudWatch Alarms**: Tracks errors/latency to trigger rollbacks.
+- **CDK (TypeScript)**: Infrastructure as code for defining resources.
 
 ---
 
@@ -26,26 +28,42 @@ Implement safe canary deployments for a Lambda function behind API Gateway using
 ### 1. Lambda Setup
 
 - Define the Lambda function in CDK.
-- Use `handler.currentVersion` to create an immutable version.
-- Attach a `prod` alias pointing to the current version.
+- Create an immutable version using `handler.currentVersion`.
+- Assign a `prod` alias to the current version.
 
 ### 2. API Gateway Setup
 
-- Create an API Gateway (`LambdaRestApi`).
-- Point it to the Lambda alias (not `$LATEST`).
+- Use `LambdaRestApi` to create an API Gateway.
+- Link it to the Lambda alias instead of `$LATEST`.
 
 ### 3. Canary Deployment with CodeDeploy
 
-- Create a `LambdaDeploymentGroup` in CDK.
+- Define a `LambdaDeploymentGroup` in CDK.
 - Attach it to the Lambda `prod` alias.
-- Choose a deployment strategy (e.g., `CANARY_10PERCENT_5MINUTES`):
-  - 10% traffic → new version for 5 minutes.
-  - If no errors → auto-shift to 100%.
+- Select a deployment strategy like `CANARY_10PERCENT_5MINUTES`:
+  - Route 10% of traffic to the new version for 5 minutes.
+  - If no issues arise, shift 100% of traffic to the new version.
 
 ### 4. CloudWatch Alarm for Rollback
 
-- Create a `cloudwatch.Alarm` on `alias.metricErrors()`.
-- Add it to the deployment group.
-- If the alarm triggers → CodeDeploy rolls back automatically.
+- Set up a `cloudwatch.Alarm` on `alias.metricErrors()`.
+- Add the alarm to the deployment group.
+- Trigger automatic rollback if the alarm is activated.
 
 ---
+
+## ✅ Benefits of This Setup
+
+- Zero-downtime deployments.
+- Safe validation of new code in production.
+- Automatic rollback on failures.
+- Fully managed by AWS CodeDeploy and CloudWatch.
+- Declaratively defined using CDK (TypeScript).
+
+---
+
+## 🔮 Next Enhancements
+
+- Add latency-based CloudWatch alarms to monitor response times.
+- Integrate with CI/CD pipelines like CodePipeline or GitHub Actions.
+- Customize deployment configurations for finer traffic control.
