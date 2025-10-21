@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS CodeDeploy: Canary Deployments</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            overflow: hidden;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide {
+            width: 90%;
+            max-width: 1200px;
+            height: 85vh;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.3);
+            padding: 60px;
+            display: none;
+            flex-direction: column;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        .slide.active {
+            display: flex;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .slide h1 {
+            color: #232f3e;
+            font-size: 3em;
+            margin-bottom: 20px;
+            border-bottom: 4px solid #ff9900;
+            padding-bottom: 15px;
+        }
+
+        .slide h2 {
+            color: #232f3e;
+            font-size: 2.2em;
+            margin-bottom: 25px;
+            margin-top: 15px;
+        }
+
+        .slide h3 {
+            color: #ff9900;
+            font-size: 1.5em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .slide p, .slide li {
+            font-size: 1.2em;
+            line-height: 1.8;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .slide ul {
+            margin-left: 30px;
+        }
+
+        .slide code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #c7254e;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+
+        .code-block .keyword { color: #569cd6; }
+        .code-block .string { color: #ce9178; }
+        .code-block .comment { color: #6a9955; }
+        .code-block .function { color: #dcdcaa; }
+        .code-block .property { color: #9cdcfe; }
+
+        .architecture-diagram {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .diagram-box {
+            display: inline-block;
+            background: white;
+            border: 2px solid #232f3e;
+            border-radius: 8px;
+            padding: 15px 25px;
+            margin: 10px;
+            font-weight: bold;
+            color: #232f3e;
+        }
+
+        .diagram-arrow {
+            font-size: 2em;
+            color: #ff9900;
+            margin: 0 10px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 1em;
+        }
+
+        .comparison-table th {
+            background: #232f3e;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+        }
+
+        .comparison-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .highlight-box {
+            background: #fff3cd;
+            border-left: 4px solid #ff9900;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .warning-box {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .navigation {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            background: #ff9900;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-weight: bold;
+        }
+
+        .nav-btn:hover {
+            background: #ec7211;
+        }
+
+        .nav-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+
+        .title-slide {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .title-slide h1 {
+            font-size: 3.5em;
+            border: none;
+        }
+
+        .title-slide .subtitle {
+            font-size: 1.8em;
+            color: #666;
+            margin-top: 20px;
+        }
+
+        .aws-logo {
+            color: #ff9900;
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 20px 0;
+        }
+
+        .column {
+            padding: 20px;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .badge {
+            background: #232f3e;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            display: inline-block;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- Slide 1: Title -->
+        <div class="slide active title-slide">
+            <div class="aws-logo">☁️</div>
+            <h1>AWS CodeDeploy</h1>
+            <p class="subtitle">Canary Deployments with Automatic Rollback</p>
+            <p class="subtitle" style="font-size: 1.3em; margin-top: 40px;">Lambda + API Gateway | CDK TypeScript</p>
+        </div>
+
+        <!-- Slide 2: Agenda -->
+        <div class="slide">
+            <h1>Agenda</h1>
+            <ul style="font-size: 1.3em; line-height: 2.2;">
+                <li>📋 What is AWS CodeDeploy?</li>
+                <li>🏗️ Architecture Overview</li>
+                <li>🎯 Canary Deployment Strategy</li>
+                <li>💻 CDK Implementation (TypeScript)</li>
+                <li>🔔 CloudWatch Alarms & Automatic Rollback</li>
+                <li>⚖️ Deployment Strategy Comparison</li>
+                <li>✅ Best Practices & Gotchas</li>
+                <li>💰 Cost Considerations</li>
+                <li>🎬 Live Demo</li>
+            </ul>
+        </div>
+
+        <!-- Slide 3: What is CodeDeploy -->
+        <div class="slide">
+            <h1>What is AWS CodeDeploy?</h1>
+            <p>AWS CodeDeploy is a fully managed deployment service that automates software deployments to various compute services.</p>
+            
+            <div class="highlight-box">
+                <h3>Key Benefits</h3>
+                <ul>
+                    <li><strong>Automated Deployments:</strong> Eliminates manual deployment steps and errors</li>
+                    <li><strong>Minimize Downtime:</strong> Progressive deployment strategies reduce risk</li>
+                    <li><strong>Automatic Rollback:</strong> Reverts to previous version when issues detected</li>
+                    <li><strong>Centralized Control:</strong> Manage deployments across multiple environments</li>
+                </ul>
+            </div>
+
+            <h3>Supported Compute Platforms</h3>
+            <div class="two-column">
+                <div>
+                    <ul>
+                        <li>✅ AWS Lambda</li>
+                        <li>✅ Amazon ECS</li>
+                    </ul>
+                </div>
+                <div>
+                    <ul>
+                        <li>✅ Amazon EC2</li>
+                        <li>✅ On-premises servers</li>
+                    </ul>
+                </div>
+            </div>
+
+            <p style="margin-top: 20px;"><span class="badge">Focus: Lambda Functions</span></p>
+        </div>
+
+        <!-- Slide 4: Architecture -->
+        <div class="slide">
+            <h1>Architecture Overview</h1>
+            <h2>API Gateway + Lambda with CodeDeploy</h2>
+            
+            <div class="architecture-diagram">
+                <div class="flow-diagram">
+                    <div class="diagram-box">API Gateway</div>
+                    <span class="diagram-arrow">→</span>
+                    <div class="diagram-box">Lambda Alias<br/>(Live)</div>
+                    <span class="diagram-arrow">→</span>
+                    <div class="diagram-box">Lambda Version<br/>(v1/v2)</div>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <div class="diagram-box" style="background: #d4edda;">CloudWatch Alarms</div>
+                    <span class="diagram-arrow">↓</span>
+                    <div class="diagram-box" style="background: #fff3cd;">CodeDeploy<br/>Deployment Group</div>
+                    <span class="diagram-arrow">↓</span>
+                    <div class="diagram-box" style="background: #f8d7da;">Automatic Rollback<br/>(on alarm)</div>
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <h3>Key Components</h3>
+                <ul>
+                    <li><strong>Lambda Alias:</strong> Points to specific version (e.g., "live" alias)</li>
+                    <li><strong>CodeDeploy Application:</strong> Container for deployment configurations</li>
+                    <li><strong>Deployment Group:</strong> Defines Lambda function, alarms, and rollback config</li>
+                    <li><strong>Deployment Config:</strong> Canary10Percent5Minutes strategy</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 5: Canary Deployment -->
+        <div class="slide">
+            <h1>Canary Deployment Strategy</h1>
+            <h2>Canary10Percent5Minutes</h2>
+            
+            <p>Gradually shifts traffic from old version to new version, allowing early detection of issues.</p>
+
+            <div class="success-box">
+                <h3>How It Works</h3>
+                <ul>
+                    <li><strong>Phase 1 (0 min):</strong> 10% traffic → New version | 90% traffic → Old version</li>
+                    <li><strong>Monitor:</strong> Watch CloudWatch alarms for 5 minutes</li>
+                    <li><strong>Phase 2 (5 min):</strong> If healthy → 100% traffic → New version</li>
+                    <li><strong>Rollback:</strong> If alarm triggers → Revert to old version immediately</li>
+                </ul>
+            </div>
+
+            <h3>Traffic Shift Timeline</h3>
+            <div class="architecture-diagram">
+                <div style="text-align: left; padding: 20px;">
+                    <p><strong>T+0 min:</strong> 🟢🟢🟢🟢🟢🟢🟢🟢🟢🔴 (10% new version)</p>
+                    <p style="margin-top: 15px;"><strong>T+5 min:</strong> ⏱️ Monitoring period (CloudWatch alarms checked)</p>
+                    <p style="margin-top: 15px;"><strong>T+5 min:</strong> 🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴 (100% new version)</p>
+                    <p style="margin-top: 15px;"><strong>On Alarm:</strong> 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢 (Rollback to old version)</p>
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <strong>💡 Why Canary?</strong> Limits blast radius - only 10% of users affected if there's an issue!
+            </div>
+        </div>
+
+        <!-- Slide 6: Other Canary Options -->
+        <div class="slide">
+            <h1>AWS Predefined Canary Configurations</h1>
+            
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Configuration</th>
+                        <th>Initial %</th>
+                        <th>Wait Time</th>
+                        <th>Use Case</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Canary10Percent5Minutes</strong></td>
+                        <td>10%</td>
+                        <td>5 minutes</td>
+                        <td>✅ Quick validation, low risk</td>
+                    </tr>
+                    <tr>
+                        <td>Canary10Percent10Minutes</td>
+                        <td>10%</td>
+                        <td>10 minutes</td>
+                        <td>More thorough monitoring</td>
+                    </tr>
+                    <tr>
+                        <td>Canary10Percent15Minutes</td>
+                        <td>10%</td>
+                        <td>15 minutes</td>
+                        <td>Extended validation period</td>
+                    </tr>
+                    <tr>
+                        <td>Canary10Percent30Minutes</td>
+                        <td>10%</td>
+                        <td>30 minutes</td>
+                        <td>Critical applications</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="two-column">
+                <div class="success-box">
+                    <h3>✅ Custom Configurations</h3>
+                    <p>You can create custom traffic shifting patterns:</p>
+                    <ul>
+                        <li>Linear: 10% every N minutes</li>
+                        <li>Custom percentages</li>
+                        <li>Multiple monitoring intervals</li>
+                    </ul>
+                </div>
+                <div class="highlight-box">
+                    <h3>🎯 Our Choice</h3>
+                    <p><strong>Canary10Percent5Minutes</strong></p>
+                    <p>Balances speed with safety for API deployments.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: CDK Code Part 1 -->
+        <div class="slide">
+            <h1>CDK Implementation (1/3)</h1>
+            <h2>Lambda Function & Alias Setup</h2>
+
+            <div class="code-block">
+<span class="keyword">import</span> * <span class="keyword">as</span> lambda <span class="keyword">from</span> <span class="string">'aws-cdk-lib/aws-lambda'</span>;
+<span class="keyword">import</span> * <span class="keyword">as</span> codedeploy <span class="keyword">from</span> <span class="string">'aws-cdk-lib/aws-codedeploy'</span>;
+<span class="keyword">import</span> * <span class="keyword">as</span> cloudwatch <span class="keyword">from</span> <span class="string">'aws-cdk-lib/aws-cloudwatch'</span>;
+
+<span class="comment">// Create Lambda function</span>
+<span class="keyword">const</span> <span class="property">apiFunction</span> = <span class="keyword">new</span> lambda.<span class="function">Function</span>(<span class="keyword">this</span>, <span class="string">'ApiFunction'</span>, {
+  <span class="property">runtime</span>: lambda.Runtime.<span class="property">NODEJS_20_X</span>,
+  <span class="property">handler</span>: <span class="string">'index.handler'</span>,
+  <span class="property">code</span>: lambda.Code.<span class="function">fromAsset</span>(<span class="string">'lambda'</span>),
+  <span class="property">environment</span>: {
+    <span class="property">STAGE</span>: <span class="string">'prod'</span>
+  }
+});
+
+<span class="comment">// Create version (immutable snapshot)</span>
+<span class="keyword">const</span> <span class="property">version</span> = apiFunction.<span class="property">currentVersion</span>;
+
+<span class="comment">// Create alias pointing to version</span>
+<span class="keyword">const</span> <span class="property">alias</span> = <span class="keyword">new</span> lambda.<span class="function">Alias</span>(<span class="keyword">this</span>, <span class="string">'LiveAlias'</span>, {
+  <span class="property">aliasName</span>: <span class="string">'live'</span>,
+  <span class="property">version</span>: version
+});
+            </div>
+
+            <div class="highlight-box">
+                <strong>💡 Key Concept:</strong> Alias acts as a pointer that can be updated during deployment. API Gateway integrates with the alias, not the version directly.
+            </div>
+        </div>
+
+        <!-- Slide 8: CDK Code Part 2 -->
+        <div class="slide">
+            <h1>CDK Implementation (2/3)</h1>
+            <h2>CloudWatch Alarm Configuration</h2>
+
+            <div class="code-block">
+<span class="comment">// Create CloudWatch alarm for Lambda errors</span>
+<span class="keyword">const</span> <span class="property">errorAlarm</span> = <span class="keyword">new</span> cloudwatch.<span class="function">Alarm</span>(<span class="keyword">this</span>, <span class="string">'LambdaErrorAlarm'</span>, {
+  <span class="property">metric</span>: apiFunction.<span class="function">metricErrors</span>({
+    <span class="property">statistic</span>: <span class="string">'Sum'</span>,
+    <span class="property">period</span>: Duration.<span class="function">minutes</span>(<span class="string">1</span>)
+  }),
+  <span class="property">threshold</span>: <span class="string">5</span>,
+  <span class="property">evaluationPeriods</span>: <span class="string">2</span>,
+  <span class="property">comparisonOperator</span>: cloudwatch.ComparisonOperator.<span class="property">GREATER_THAN_THRESHOLD</span>,
+  <span class="property">treatMissingData</span>: cloudwatch.TreatMissingData.<span class="property">NOT_BREACHING</span>,
+  <span class="property">alarmDescription</span>: <span class="string">'Triggers rollback if Lambda errors exceed threshold'</span>
+});
+
+<span class="comment">// Optional: Additional alarm for throttling</span>
+<span class="keyword">const</span> <span class="property">throttleAlarm</span> = <span class="keyword">new</span> cloudwatch.<span class="function">Alarm</span>(<span class="keyword">this</span>, <span class="string">'LambdaThrottleAlarm'</span>, {
+  <span class="property">metric</span>: apiFunction.<span class="function">metricThrottles</span>({
+    <span class="property">statistic</span>: <span class="string">'Sum'</span>,
+    <span class="property">period</span>: Duration.<span class="function">minutes</span>(<span class="string">1</span>)
+  }),
+  <span class="property">threshold</span>: <span class="string">10</span>,
+  <span class="property">evaluationPeriods</span>: <span class="string">2</span>
+});
+            </div>
+
+            <div class="warning-box">
+                <strong>⚠️ Alarm Configuration:</strong> Threshold of 5 errors over 2 consecutive 1-minute periods. Adjust based on your traffic patterns!
+            </div>
+        </div>
+
+        <!-- Slide 9: CDK Code Part 3 -->
+        <div class="slide">
+            <h1>CDK Implementation (3/3)</h1>
+            <h2>CodeDeploy Setup with Rollback</h2>
+
+            <div class="code-block">
+<span class="comment">// Create CodeDeploy Application</span>
+<span class="keyword">const</span> <span class="property">application</span> = <span class="keyword">new</span> codedeploy.<span class="function">LambdaApplication</span>(<span class="keyword">this</span>, <span class="string">'ApiApplication'</span>);
+
+<span class="comment">// Create Deployment Group with Canary strategy</span>
+<span class="keyword">new</span> codedeploy.<span class="function">LambdaDeploymentGroup</span>(<span class="keyword">this</span>, <span class="string">'ApiDeploymentGroup'</span>, {
+  <span class="property">application</span>: application,
+  <span class="property">alias</span>: alias,
+  
+  <span class="comment">// Canary deployment configuration</span>
+  <span class="property">deploymentConfig</span>: codedeploy.LambdaDeploymentConfig.<span class="property">CANARY_10PERCENT_5MINUTES</span>,
+  
+  <span class="comment">// CloudWatch alarms for monitoring</span>
+  <span class="property">alarms</span>: [errorAlarm, throttleAlarm],
+  
+  <span class="comment">// Automatic rollback configuration</span>
+  <span class="property">autoRollback</span>: {
+    <span class="property">failedDeployment</span>: <span class="keyword">true</span>,  <span class="comment">// Rollback on deployment failure</span>
+    <span class="property">stoppedDeployment</span>: <span class="keyword">true</span>,  <span class="comment">// Rollback if manually stopped</span>
+    <span class="property">deploymentInAlarm</span>: <span class="keyword">true</span>   <span class="comment">// Rollback when alarm triggers ⚠️</span>
+  },
+  
+  <span class="property">deploymentGroupName</span>: <span class="string">'prod-api-deployment'</span>
+});
+            </div>
+
+            <div class="success-box">
+                <strong>✅ Complete Setup:</strong> This configuration enables automatic rollback when the Lambda error alarm breaches during the 5-minute canary window.
+            </div>
+        </div>
+
+        <!-- Slide 10: Deployment Flow -->
+        <div class="slide">
+            <h1>Deployment Flow</h1>
+            <h2>What Happens During Deployment?</h2>
+
+            <div class="architecture-diagram" style="text-align: left;">
+                <div style="padding: 20px;">
+                    <p style="margin: 15px 0;"><strong>1️⃣ Deployment Initiated</strong></p>
+                    <p style="margin-left: 30px;">New Lambda version published → CodeDeploy triggered</p>
+                    
+                    <p style="margin: 15px 0;"><strong>2️⃣ Phase 1: Initial Canary (T+0)</strong></p>
+                    <p style="margin-left: 30px;">• Alias updated: 10% → New version, 90% → Old version</p>
+                    <p style="margin-left: 30px;">• CloudWatch alarms actively monitored</p>
+                    
+                    <p style="margin: 15px 0;"><strong>3️⃣ Monitoring Window (0-5 minutes)</strong></p>
+                    <p style="margin-left: 30px;">• CodeDeploy watches specified alarms</p>
+                    <p style="margin-left: 30px;">• If alarm breaches → <span style="color: #dc3545;">ROLLBACK TRIGGERED</span></p>
+                    
+                    <p style="margin: 15px 0;"><strong>4️⃣ Phase 2: Full Deployment (T+5)</strong></p>
+                    <p style="margin-left: 30px;">• If no alarms → Alias updated: 100% → New version</p>
+                    <p style="margin-left: 30px;">• Deployment marked as <span style="color: #28a745;">SUCCESSFUL</span></p>
+                    
+                    <p style="margin: 15px 0;"><strong>5️⃣ Rollback Scenario</strong></p>
+                    <p style="margin-left: 30px;">• Alarm triggers → Traffic immediately shifted back to old version</p>
+                    <p style="margin-left: 30px;">• Deployment marked as <span style="color: #dc3545;">FAILED</span></p>
+                    <p style="margin-left: 30px;">• CloudWatch logs capture failure reason</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 11: Strategy Comparison -->
+        <div class="slide">
+            <h1>Deployment Strategy Comparison</h1>
+            
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Strategy</th>
+                        <th>Traffic Shift</th>
+                        <th>Rollback</th>
+                        <th>Risk</th>
+                        <th>Best For</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="background: #d4edda;">
+                        <td><strong>Canary</strong></td>
+                        <td>Gradual (10% → 100%)</td>
+                        <td>✅ Automatic</td>
+                        <td>🟢 Low</td>
+                        <td>Production APIs</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Linear</strong></td>
+                        <td>Incremental (10% every N min)</td>
+                        <td>✅ Automatic</td>
+                        <td>🟢 Low</td>
+                        <td>Conservative rollouts</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Blue/Green</strong></td>
+                        <td>Instant (0% → 100%)</td>
+                        <td>✅ Manual/Automatic</td>
+                        <td>🟡 Medium</td>
+                        <td>Full environment swap</td>
+                    </tr>
+                    <tr>
+                        <td><strong>All-at-Once</strong></td>
+                        <td>Immediate (100%)</td>
+                        <td>❌ Manual only</td>
+                        <td>🔴 High</td>
+                        <td>Dev/Test environments</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="highlight-box">
+                <h3>Why Canary for Lambda?</h3>
+                <ul>
+                    <li>Minimize blast radius (only 10% users affected initially)</li>
+                    <li>Fast feedback loop (5 minutes validation)</li>
+                    <li>Zero downtime during rollback</li>
+                    <li>Works seamlessly with Lambda aliases and versions</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 12: Best Practices -->
+        <div class="slide">
+            <h1>Best Practices</h1>
+            
+            <div class="success-box">
+                <h3>✅ Do This</h3>
+                <ul>
+                    <li><strong>Use Multiple Alarms:</strong> Monitor errors, throttles, latency, and custom metrics</li>
+                    <li><strong>Set Appropriate Thresholds:</strong> Based on baseline traffic and error rates</li>
+                    <li><strong>Version Everything:</strong> Always publish new Lambda versions for CodeDeploy</li>
+                    <li><strong>Test Rollbacks:</strong> Simulate failures in non-prod to validate rollback behavior</li>
+                    <li><strong>Enable X-Ray:</strong> Distributed tracing helps identify issues faster</li>
+                    <li><strong>Immutable Versions:</strong> Never modify existing Lambda versions</li>
+                    <li><strong>Monitor Post-Deployment:</strong> Keep watching metrics even after successful deployment</li>
+                    <li><strong>Use Deployment Hooks:</strong> Add pre/post-traffic validation tests</li>
+                </ul>
+            </div>
+
+            <div class="warning-box">
+                <h3>❌ Avoid This</h3>
+                <ul>
+                    <li><strong>No Alarms:</strong> CodeDeploy without alarms = no automatic rollback</li>
+                    <li><strong>Too Aggressive Thresholds:</strong> Can cause unnecessary rollbacks</li>
+                    <li><strong>Too Lenient Thresholds:</strong> May not catch real issues</li>
+                    <li><strong>Ignoring Cold Starts:</strong> Can trigger false alarms initially</li>
+                    <li><strong>Single Metric Monitoring:</strong> Errors alone don't tell the full story</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 13: Gotchas -->
+        <div class="slide">
+            <h1>Common Gotchas & Pitfalls</h1>
+            
+            <div class="warning-box">
+                <h3>⚠️ 1. Alarm Data Delay</h3>
+                <p>CloudWatch metrics have ~1-2 minute delay. A spike might not trigger rollback immediately.</p>
+                <p><strong>Solution:</strong> Use shorter evaluation periods or increase sensitivity.</p>
+            </div>
+
+            <div class="warning-box">
+                <h3>⚠️ 2. Alias vs Version Confusion</h3>
+                <p>API Gateway must point to <strong>alias</strong>, not version. Otherwise, traffic shifting won't work.</p>
+                <p><strong>Solution:</strong> Always integrate with <code>alias.functionArn</code>, not <code>version.functionArn</code>.</p>
+            </div>
+
+            <div class="warning-box">
+                <h3>⚠️ 3. TreatMissingData Setting</h3>
+                <p>Default is "missing" which can cause false alarms during low traffic periods.</p>
+                <p><strong>Solution:</strong> Set to <code>NOT_BREACHING</code> for most scenarios.</p>
+            </div>
+
+            <div class="warning-box">
+                <h3>⚠️ 4. Cold Start Errors</h3>
+                <p>Lambda cold starts during canary phase can trigger timeouts and false alarms.</p>
+                <p><strong>Solution:</strong> Use provisioned concurrency or adjust alarm thresholds for initial deployment phase.</p>
+            </div>
+
+            <div class="warning-box">
+                <h3>⚠️ 5. IAM Permissions</h3>
+                <p>CodeDeploy needs permissions to update Lambda aliases and read CloudWatch alarms.</p>
+                <p><strong>Solution:</strong> CDK handles this automatically, but verify if using custom roles.</p>
+            </div>
+        </div>
+
+        <!-- Slide 14: Cost Considerations -->
+        <div class="slide">
+            <h1>Cost Considerations</h1>
+            
+            <h3>CodeDeploy for Lambda</h3>
+            <div class="success-box">
+                <p style="font-size: 1.4em;"><strong>FREE</strong> - No additional charge for using CodeDeploy with Lambda functions!</p>
+            </div>
+
+            <h3>Associated Costs</h3>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Cost Component</th>
+                        <th>Pricing</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Lambda</strong></td>
+                        <td>Invocations + Duration</td>
+                        <td>$0.20 per 1M requests<br/>$0.0000166667 per GB-second</td>
+                    </tr>
+                    <tr>
+                        <td><strong>CloudWatch Alarms</strong></td>
+                        <td>Standard metrics alarms</td>
+                        <td>$0.10 per alarm per month</td>
+                    </tr>
+                    <tr>
+                        <td><strong>CloudWatch Logs</strong></td>
+                        <td>Ingestion + Storage</td>
+                        <td>$0.50 per GB ingested<br/>$0.03 per GB stored</td>
+                    </tr>
+                    <tr>
+                        <td><strong>API Gateway</strong></td>
+                        <td>API calls</td>
+                        <td>$3.50 per million requests</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="highlight-box">
+                <h3>💰 Cost Optimization Tips</h3>
+                <ul>
+                    <li>Canary deployments don't increase Lambda costs (same total invocations)</li>
+                    <li>Minimize alarm count - use composite alarms when possible</li>
+                    <li>Adjust CloudWatch log retention (default: never expire)</li>
+                    <li>Use Lambda ARM architecture for 20% cost savings</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 15: Demo Prep -->
+        <div class="slide">
+            <h1>Live Demo</h1>
+            <h2>What We'll Demonstrate</h2>
+            
+            <div class="highlight-box">
+                <h3>🎯 Demo Scenario</h3>
+                <p>Deploy a new Lambda version that intentionally has errors to trigger automatic rollback via CloudWatch alarm.</p>
+            </div>
+
+            <h3>Demo Steps</h3>
+            <ol style="font-size: 1.2em; line-height: 2;">
+                <li><strong>Show Current State:</strong> Lambda function with v1, API working correctly</li>
+                <li><strong>Deploy Faulty Version:</strong> Push v2 with code that throws errors</li>
+                <li><strong>Observe Canary:</strong> 10% traffic goes to v2 (errors start appearing)</li>
+                <li><strong>Watch CloudWatch:</strong> Error alarm breaches threshold</li>
+                <li><strong>Automatic Rollback:</strong> CodeDeploy reverts to v1 automatically</li>
+                <li><strong>Verify Recovery:</strong> All traffic back to v1, API healthy again</li>
+            </ol>
+
+            <div class="two-column" style="margin-top: 30px;">
+                <div class="success-box">
+                    <h3>✅ Success Indicators</h3>
+                    <ul>
+                        <li>Alarm triggers in CloudWatch</li>
+                        <li>Deployment status: FAILED</li>
+                        <li>Traffic automatically reverted</li>
+                        <li>No manual intervention needed</li>
+                    </ul>
+                </div>
+                <div class="highlight-box">
+                    <h3>📊 What to Watch</h3>
+                    <ul>
+                        <li>CodeDeploy console</li>
+                        <li>CloudWatch metrics/alarms</li>
+                        <li>Lambda alias traffic shifting</li>
+                        <li>API Gateway responses</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 16: Key Takeaways -->
+        <div class="slide">
+            <h1>Key Takeaways</h1>
+            
+            <div class="success-box" style="font-size: 1.1em;">
+                <h3>🎯 Remember These Points</h3>
+                <ul style="line-height: 2;">
+                    <li>✅ <strong>Canary deployments minimize risk</strong> by limiting initial exposure to 10%</li>
+                    <li>✅ <strong>Automatic rollback is critical</strong> - configure CloudWatch alarms properly</li>
+                    <li>✅ <strong>Lambda aliases enable traffic shifting</strong> - always deploy to aliases</li>
+                    <li>✅ <strong>Monitor multiple metrics</strong> - errors, throttles, latency, custom metrics</li>
+                    <li>✅ <strong>Test rollbacks in non-prod</strong> - validate your configuration works</li>
+                    <li>✅ <strong>CodeDeploy for Lambda is FREE</strong> - no excuse not to use it!</li>
+                </ul>
+            </div>
+
+            <div class="highlight-box" style="margin-top: 30px;">
+                <h3>📚 Additional Resources</h3>
+                <ul>
+                    <li><strong>AWS Docs:</strong> docs.aws.amazon.com/codedeploy</li>
+                    <li><strong>CDK Examples:</strong> github.com/aws-samples/aws-cdk-examples</li>
+                    <li><strong>Lambda Best Practices:</strong> docs.aws.amazon.com/lambda/latest/dg/best-practices.html</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 17: Q&A -->
+        <div class="slide title-slide">
+            <h1 style="font-size: 4em;">Questions?</h1>
+            <p class="subtitle" style="margin-top: 40px; font-size: 1.5em;">Let's discuss CodeDeploy, canary deployments,<br/>and automatic rollback strategies</p>
+            <div style="margin-top: 60px; font-size: 1.2em; color: #666;">
+                <p>📧 Contact Information</p>
+                <p style="margin-top: 20px;">🔗 AWS CodeDeploy Documentation</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="slide-counter">
+        <span id="current-slide">1</span> / <span id="total-slides">17</span>
+    </div>
+
+    <div class="navigation">
+        <button class="nav-btn" id="prev-btn" onclick="prevSlide()">← Previous</button>
+        <button class="nav-btn" id="next-btn" onclick="nextSlide()">Next →</button>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        
+        document.getElementById('total-slides').textContent = totalSlides;
+
+        function showSlide(n) {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (n + totalSlides) % totalSlides;
+            slides[currentSlide].classList.add('active');
+            
+            document.getElementById('current-slide').textContent = currentSlide + 1;
+            
+            // Update button states
+            document.getElementById('prev-btn').disabled = currentSlide === 0;
+            document.getElementById('next-btn').disabled = currentSlide === totalSlides - 1;
+        }
+
+        function nextSlide() {
+            if (currentSlide < totalSlides - 1) {
+                showSlide(currentSlide + 1);
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                showSlide(currentSlide - 1);
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        // Initialize
+        showSlide(0);
+    </script>
+</body>
+</html>
